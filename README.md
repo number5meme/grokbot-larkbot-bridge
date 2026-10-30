@@ -9,6 +9,9 @@ same common options, same `reply.sh` style, same health checks and supervisor sc
 **long connection** (`WSClient`) event subscription. It is **outbound-only** (HTTPS and WSS): no open port, public IP,
 domain, or TLS certificate is needed. The default domain is Lark international (`open.larksuite.com`).
 
+If the host may sleep, the optional [always-on relay](#always-on-relay-cloudflare-worker) in `relay/` (a small
+Cloudflare Worker) receives Lark's HTTP event push instead and forwards the same payload, so no message is missed.
+
 ## Quick start
 
 ```sh
@@ -45,7 +48,8 @@ runs the offline test suite.
 - An HTTPS endpoint that accepts JSON POSTs, and its Authorization header value.
 - **An always-on host.** The long connection lives in this process: while the host sleeps or is off, the bot receives
   nothing. Lark retries undelivered events only for a limited time, so long outages can lose messages. Run it on a
-  server, a VM, or a machine that never sleeps, ideally under `watchdog.sh`, cron, or systemd (see below).
+  server, a VM, or a machine that never sleeps, ideally under `watchdog.sh`, cron, or systemd (see below). If the host
+  sleeps, use the [always-on relay](#always-on-relay-cloudflare-worker) instead.
 
 ## Setup
 
@@ -230,9 +234,62 @@ Run a scheduled job on your agent platform (for example a Grok Bot routine) that
 
 ### Option 2: Always-on relay (instant, recommended for production)
 
-Move message receiving to something that never sleeps. Configure Lark's official HTTP event callback (request URL mode) to point at a small always-on relay (for example a free Cloudflare Worker) that forwards each event to your agent's webhook URL. The webhook wakes the agent on its own, so replies go out immediately and the host only needs to be awake while replying.
+Move message receiving to something that never sleeps: the [always-on relay](#always-on-relay-cloudflare-worker)
+shipped in `relay/`. Lark pushes each event over HTTP to a free Cloudflare Worker, which forwards it to your agent's
+webhook with the same payload. The webhook wakes the agent on its own, so replies go out immediately and the host only
+needs to be awake while replying.
 
 Alternatively, run the bridge itself on a machine that stays awake.
+
+## Always-on relay (Cloudflare Worker)
+
+`relay/` contains `larkbot-relay`, a Cloudflare Worker that replaces the long connection for receiving. It is the
+recommended setup when the bridge host can sleep. Full details: [relay/README.md](relay/README.md).
+
+```
+ Lark user ──> Lark bot ──> Lark event push (HTTPS) ──> larkbot-relay (Cloudflare Worker) ── HTTPS POST (JSON) ──> your webhook
+                            Lark OpenAPI <── HTTPS ── reply.sh / relay/fetch-media.sh <────────────────────────── your agent
+```
+
+What it does: answers Lark's URL verification, decrypts events and checks `X-Lark-Signature` when an Encrypt Key is
+set, applies the bridge's filters (only `im.message.receive_v1` from users; group messages only when they @mention the
+bot), converts and truncates text exactly like the bridge, dedupes by `event_id` / `message_id`, answers Lark at once,
+and forwards the [payload](#webhook-payload) with the same retry policy (3 attempts).
+
+Setup:
+
+1. Deploy (free Cloudflare account; API token from the "Edit Cloudflare Workers" template):
+   ```sh
+   cd relay && npm install
+   export CLOUDFLARE_API_TOKEN=<token> CLOUDFLARE_ACCOUNT_ID=<account id>
+   npx wrangler deploy                          # https://larkbot-relay.<your-subdomain>.workers.dev
+   npx wrangler secret put WEBHOOK_URL          # same value as FORWARD_WEBHOOK_URL
+   npx wrangler secret put WEBHOOK_AUTH         # same value as FORWARD_WEBHOOK_AUTH, e.g. "Bearer <key>"
+   npx wrangler secret put LARK_ENCRYPT_KEY     # the Encrypt Key set in step 2
+   ```
+   Secrets are read from stdin. Optional: `LARK_VERIFICATION_TOKEN`, `LARK_BOT_OPEN_ID`, `OWNER_ID`, `ALLOWLIST`; the
+   other options (`MAX_MESSAGE_CHARS`, `GROUP_REQUIRE_MENTION`, `MIRROR_TO_MAIN_CHAT`, `OWNER_PROTECTION`) are
+   `[vars]` in `relay/wrangler.toml`.
+2. In the developer console: **Events & Callbacks** -> **Encryption Strategy**: set an **Encrypt Key**. Then
+   **Event configuration** -> subscription mode: **Send events to developer server**, and enter the **Request URL**
+   `https://larkbot-relay.<your-subdomain>.workers.dev/` (Lark verifies it immediately). Keep `im.message.receive_v1`
+   subscribed; the callback configuration is not needed. Finally **Version Management & Release**: create and publish a
+   version.
+3. Message the bot and watch `npx wrangler tail larkbot-relay`.
+4. Stop the long-connection bridge (`./stop.sh`): it no longer receives anything. Keep using `reply.sh` to reply.
+
+Media: the Worker cannot save files, so media entries arrive as `{ kind, path: null, error: "NOT_DOWNLOADED",
+message_id, file_key, resource_type, filename? }` and `handling_hint` says so. Fetch a file on the machine with
+`relay/fetch-media.sh --message-id <message_id> --key <file_key> --type <resource_type>`, which prints the usual media
+entry with a local `path`. Add this step to your routine instructions.
+
+Region: Lark international reaches `workers.dev` fine. Feishu (China) servers may not reach `workers.dev`; bind a
+Workers Custom Domain (for example `lark.example.com`) to the Worker and use that as the Request URL.
+
+Caveats: dedupe is best effort (per Worker isolate, plus the Cache API), so a redelivered event can occasionally be
+forwarded twice; there is no retry queue (a payload that fails all 3 attempts is only logged, not saved for
+`replay.sh`); with `OWNER_PROTECTION=on` there is no first-sender binding, so set `OWNER_ID`; rate limits are not
+applied. `cd relay && npm test` (or `npm run test:relay`) runs the relay's offline tests.
 
 ## Security and trust model
 
@@ -260,6 +317,7 @@ Alternatively, run the bridge itself on a machine that stays awake.
 | `src/media.js`, `src/reply.js` | Resource download with a size cap; text, image and file sending. |
 | `docs/lark-api.md` | API notes and error codes. |
 | `test/` | `npm test` (node --test, fakes, no network). |
+| `relay/` | Optional [always-on relay](#always-on-relay-cloudflare-worker) (Cloudflare Worker), its tests, and `relay/fetch-media.sh`. |
 
 ## Credits
 

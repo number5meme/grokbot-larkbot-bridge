@@ -14,7 +14,8 @@
     "setup": "node bin/setup.js",
     "bridge": "node bin/bridge.js",
     "healthcheck": "node bin/healthcheck.js",
-    "verify": "node bin/verify.js"
+    "verify": "node bin/verify.js",
+    "test:relay": "node --test relay/test/*.test.js"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "1.76.0"

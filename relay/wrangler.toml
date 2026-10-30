@@ -1,0 +1,17 @@
+# Cloudflare Worker: Lark HTTP event callbacks -> webhook.
+# The account id comes from the CLOUDFLARE_ACCOUNT_ID environment variable (not stored here).
+# Secrets (set with `wrangler secret put`, never stored here): WEBHOOK_URL, WEBHOOK_AUTH,
+# and optionally LARK_ENCRYPT_KEY, LARK_VERIFICATION_TOKEN, LARK_BOT_OPEN_ID, OWNER_ID, ALLOWLIST.
+name = "larkbot-relay"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+[vars]
+MAX_MESSAGE_CHARS = "4000"
+GROUP_REQUIRE_MENTION = "true"
+MIRROR_TO_MAIN_CHAT = "false"
+OWNER_PROTECTION = "off"
+
+[observability]
+enabled = true
