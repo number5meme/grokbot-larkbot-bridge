@@ -1,0 +1,16 @@
+# Runtime state, logs and received media (credentials, tokens, ids, message data)
+state/
+logs/
+media/
+*.log
+*.out
+*.jsonl
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and OS files
+node_modules/
+.DS_Store

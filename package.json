@@ -1,0 +1,41 @@
+{
+  "name": "grokbot-larkbot-bridge",
+  "version": "1.0.0",
+  "description": "Outbound-only bridge from a Lark (Lark Suite) custom app bot to any HTTP webhook, using the official Lark Node SDK long connection, with owner protection, inbound media, image/file replies, and anti-disconnect hardening.",
+  "license": "MIT",
+  "author": "number5meme",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-timeout=60000 test/*.test.js",
+    "setup": "node bin/setup.js",
+    "bridge": "node bin/bridge.js",
+    "healthcheck": "node bin/healthcheck.js",
+    "verify": "node bin/verify.js"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "1.76.0"
+  },
+  "keywords": [
+    "lark",
+    "larksuite",
+    "feishu",
+    "lark-bot",
+    "lark-open-platform",
+    "bot",
+    "chatbot",
+    "websocket",
+    "long-connection",
+    "webhook",
+    "bridge",
+    "ai-agent",
+    "llm",
+    "grok",
+    "grok-bot",
+    "routine",
+    "outbound-only"
+  ]
+}
