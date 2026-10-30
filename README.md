@@ -214,6 +214,26 @@ Anti-disconnect behavior:
   `LONG_CONNECTION_REJECTED` (exit 19; the endpoint refused the long connection three times in a row; check setup step 1.4).
 - Single instance per state folder; `stop.sh` never kills a reused PID.
 
+## Known limitation: messages sent while the host is asleep
+
+The bridge keeps an outbound long connection open to the platform. If the machine running it suspends or sleeps (for example an idle cloud box or a laptop with the lid closed), that connection drops and the platform cannot push new messages to it. The bridge reconnects automatically as soon as the host wakes up, but messages sent during the outage are not redelivered by the platform, so they are never forwarded and never answered.
+
+Nothing in the bridge can wake a sleeping host by itself. If your host sleeps, use one of these approaches:
+
+### Option 1: Scheduled wake-up (no external services)
+
+Run a scheduled job on your agent platform (for example a Grok Bot routine) that wakes the host every N minutes. On each wake the bridge reconnects so new messages are received again.
+
+- Worst-case reply delay is about N minutes (the minimum interval depends on your scheduler; Grok Bot routines allow 5 minutes).
+- Every wake-up is a full agent run and counts toward your usage limits, so shorter intervals cost more. 15 to 30 minutes is a reasonable start.
+- Planned: on each wake, fetch messages missed while offline and forward them. This is not implemented yet, so for now messages sent while the host was asleep are still lost; fetching history will also need the app permission to read chat history.
+
+### Option 2: Always-on relay (instant, recommended for production)
+
+Move message receiving to something that never sleeps. Configure Lark's official HTTP event callback (request URL mode) to point at a small always-on relay (for example a free Cloudflare Worker) that forwards each event to your agent's webhook URL. The webhook wakes the agent on its own, so replies go out immediately and the host only needs to be awake while replying.
+
+Alternatively, run the bridge itself on a machine that stays awake.
+
 ## Security and trust model
 
 - Identity comes **only** from Lark's sender fields (`sender.sender_id.open_id`, set by Lark for the authenticated
